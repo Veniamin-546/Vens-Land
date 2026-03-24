@@ -3,41 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Vens Land: Fixed Build</title>
+    <title>Vens Land: Tycoon</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #a2d2ff; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #a2d2ff; font-family: 'Arial', sans-serif; }
         #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
         
         .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 15px; pointer-events: auto; box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
         
-        #stats { position: absolute; top: 15px; left: 15px; padding: 12px 20px; font-weight: bold; border-left: 4px solid #2ecc71; }
-        
-        /* Кнопка постройки */
-        #build-menu { 
-            position: absolute; display: none; transform: translate(-50%, -120%); 
-            padding: 10px; z-index: 1000; text-align: center;
-        }
-        .btn-build { 
-            background: #2ecc71; color: white; border: none; padding: 12px 25px; 
-            border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 14px;
-        }
+        #stats-bar { position: absolute; top: 15px; left: 15px; right: 15px; display: flex; justify-content: space-between; padding: 12px 20px; }
+        .stat-item { display: flex; flex-direction: column; }
+        .val { font-weight: 900; font-size: 18px; color: #2ecc71; }
 
-        #timer-label {
-            position: absolute; display: none; transform: translate(-50%, -150%);
-            background: #1a1a1a; color: #ffcc00; padding: 5px 15px;
-            border-radius: 8px; font-weight: bold; pointer-events: none; z-index: 50;
+        /* Всплывающие меню */
+        .menu-popup { position: absolute; display: none; transform: translate(-50%, -120%); padding: 12px; z-index: 1000; text-align: center; min-width: 150px; }
+        .btn-opt { width: 100%; margin: 5px 0; padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: white; }
+        .btn-house { background: #3498db; }
+        .btn-shop { background: #9b59b6; }
+        .btn-upgrade { background: #f1c40f; color: #000; }
+        .btn-sell { background: #e74c3c; }
+        .btn-opt:disabled { background: #ccc; cursor: not-allowed; }
+
+        #timer-label { 
+            position: absolute; display: none; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8); color: #fff; padding: 15px 30px; border-radius: 30px; font-weight: bold;
         }
     </style>
 </head>
 <body>
 
     <div id="ui">
-        <div id="stats" class="glass">БАЛАНС: <span id="balance">0</span> $</div>
-        
-        <div id="build-menu" class="glass">
-            <button class="btn-build" id="main-build-btn">ПОСТРОИТЬ (100$)</button>
+        <div id="stats-bar" class="glass">
+            <div class="stat-item">БАЛАНС <span id="balance" class="val">0</span></div>
+            <div class="stat-item">ДОХОД/МИН <span id="income" class="val" style="color:#3498db">0</span></div>
+        </div>
+
+        <div id="empty-menu" class="menu-popup glass">
+            <button class="btn-opt btn-house" onclick="startBuild('house')">ДОМ (100$)</button>
+            <button class="btn-opt btn-shop" onclick="startBuild('shop')">МАГАЗИН (300$)</button>
+        </div>
+
+        <div id="object-menu" class="menu-popup glass">
+            <button class="btn-opt btn-upgrade" onclick="upgradeObject()">УЛУЧШИТЬ (цена x2)</button>
+            <button class="btn-opt btn-sell" onclick="sellObject()">ПРОДАТЬ</button>
         </div>
 
         <div id="timer-label">СТРОЙКА: 5с</div>
@@ -47,15 +56,18 @@
         let tg = window.Telegram.WebApp;
         tg.expand();
 
-        let balance = 1000000; 
-        let selectedCell = { x: 0, z: 0 };
-        let occupiedCells = new Set();
+        let balance = 1000000;
+        let incomePerMin = 0;
+        let isBuilding = false;
+        let selectedCell = null; 
+        let selectedObject = null;
+        const buildingsMap = new Map(); // Храним данные о постройках
 
         // --- THREE.JS ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(15, 18, 15);
+        camera.position.set(18, 20, 18);
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -65,128 +77,152 @@
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
         const sun = new THREE.DirectionalLight(0xffffff, 1);
-        sun.position.set(10, 20, 10);
+        sun.position.set(10, 25, 10);
         sun.castShadow = true;
         scene.add(sun);
 
-        // Поле
-        const ground = new THREE.Mesh(
-            new THREE.PlaneGeometry(40, 40),
-            new THREE.MeshStandardMaterial({ color: 0x55aa44 })
-        );
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x55aa44 }));
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
+        scene.add(new THREE.GridHelper(40, 20, 0xffffff, 0x448833));
 
-        // Яркая сетка
-        const grid = new THREE.GridHelper(40, 20, 0xffffff, 0x448833);
-        grid.position.y = 0.05;
-        scene.add(grid);
+        const buildingsGroup = new THREE.Group();
+        scene.add(buildingsGroup);
 
-        const buildings = new THREE.Group();
-        scene.add(buildings);
-
-        // --- ЛОГИКА КЛИКА ---
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
-        // Важно: слушаем клик на renderer, а не на window
+        // --- КЛИКИ ---
         renderer.domElement.addEventListener('pointerdown', (event) => {
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
             raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObject(ground);
 
-            const menu = document.getElementById('build-menu');
+            const intersects = raycaster.intersectObjects([ground, ...buildingsGroup.children], true);
+            
+            const emptyMenu = document.getElementById('empty-menu');
+            const objMenu = document.getElementById('object-menu');
+            emptyMenu.style.display = objMenu.style.display = 'none';
 
             if (intersects.length > 0) {
-                let gx = Math.round(intersects[0].point.x / 2) * 2;
-                let gz = Math.round(intersects[0].point.z / 2) * 2;
+                let hit = intersects[0];
+                
+                // Проверяем, попали ли в здание
+                let buildObj = null;
+                hit.object.traverseAncestors(a => { if(a.userData.type) buildObj = a; });
 
-                if (occupiedCells.has(`${gx},${gz}`)) {
-                    menu.style.display = 'none';
-                    return;
+                if (buildObj) {
+                    selectedObject = buildObj;
+                    objMenu.style.display = 'block';
+                    objMenu.style.left = event.clientX + 'px';
+                    objMenu.style.top = event.clientY + 'px';
+                } else {
+                    // Клик по земле
+                    if(isBuilding) return;
+                    let gx = Math.round(hit.point.x / 2) * 2;
+                    let gz = Math.round(hit.point.z / 2) * 2;
+                    selectedCell = { x: gx, z: gz };
+                    emptyMenu.style.display = 'block';
+                    emptyMenu.style.left = event.clientX + 'px';
+                    emptyMenu.style.top = event.clientY + 'px';
                 }
-
-                selectedCell.x = gx;
-                selectedCell.z = gz;
-
-                menu.style.display = 'block';
-                menu.style.left = event.clientX + 'px';
-                menu.style.top = event.clientY + 'px';
-            } else {
-                menu.style.display = 'none';
             }
         });
 
-        // Привязываем функцию к кнопке через JS, чтобы избежать проблем с областями видимости
-        document.getElementById('main-build-btn').onclick = function() {
-            if (balance < 100) return alert("Мало денег!");
+        // --- ЛОГИКА СТРОЙКИ ---
+        function startBuild(type) {
+            const cost = type === 'house' ? 100 : 300;
+            const time = type === 'house' ? 5 : 8;
+
+            if (balance < cost) return alert("Недостаточно денег!");
             
-            balance -= 100;
-            const cellKey = `${selectedCell.x},${selectedCell.z}`;
-            occupiedCells.add(cellKey);
-            
-            document.getElementById('build-menu').style.display = 'none';
+            balance -= cost;
+            isBuilding = true;
+            document.getElementById('empty-menu').style.display = 'none';
             updateUI();
 
-            // Создаем каркас
-            const ghost = new THREE.Mesh(
-                new THREE.BoxGeometry(1.5, 0.2, 1.5),
-                new THREE.MeshStandardMaterial({ color: 0xffcc00, emissive: 0xffaa00 })
-            );
-            ghost.position.set(selectedCell.x, 0.1, selectedCell.z);
-            scene.add(ghost);
-
-            // Показываем таймер
             const timerLabel = document.getElementById('timer-label');
             timerLabel.style.display = 'block';
-            timerLabel.style.left = "50%";
-            timerLabel.style.top = "50%";
-            
-            let timeLeft = 5;
-            timerLabel.innerText = `СТРОЙКА: ${timeLeft}с`;
+            let timeLeft = time;
 
-            let buildInt = setInterval(() => {
+            let interval = setInterval(() => {
                 timeLeft--;
                 timerLabel.innerText = `СТРОЙКА: ${timeLeft}с`;
-                
-                if (timeLeft <= 0) {
-                    clearInterval(buildInt);
-                    scene.remove(ghost);
+                if(timeLeft <= 0) {
+                    clearInterval(interval);
                     timerLabel.style.display = 'none';
-                    spawnHouse(selectedCell.x, selectedCell.z);
+                    spawnObject(selectedCell.x, selectedCell.z, type);
+                    isBuilding = false;
                 }
             }, 1000);
-            
-            tg.HapticFeedback.impactOccurred('medium');
-        };
+        }
 
-        function spawnHouse(x, z) {
-            const house = new THREE.Group();
-            const body = new THREE.Mesh(
-                new THREE.BoxGeometry(1.6, 1.4, 1.6),
-                new THREE.MeshStandardMaterial({ color: 0xffffff })
-            );
+        function spawnObject(x, z, type, lvl = 1) {
+            const group = new THREE.Group();
+            group.userData = { type: type, level: lvl, x: x, z: z };
+
+            const color = type === 'house' ? 0xffffff : 0x3498db;
+            const roofCol = type === 'house' ? 0xaa3333 : 0x2c3e50;
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.4, 1.6), new THREE.MeshStandardMaterial({ color: color }));
             body.position.y = 0.7;
             const roof = new THREE.Mesh(
-                new THREE.ConeGeometry(1.3, 0.8, 4),
-                new THREE.MeshStandardMaterial({ color: 0xaa3333 })
+                type === 'house' ? new THREE.ConeGeometry(1.3, 0.8, 4) : new THREE.BoxGeometry(1.8, 0.4, 1.8),
+                new THREE.MeshStandardMaterial({ color: roofCol })
             );
-            roof.position.y = 1.5;
-            roof.rotation.y = Math.PI/4;
+            roof.position.y = type === 'house' ? 1.5 : 1.6;
+            if(type === 'house') roof.rotation.y = Math.PI/4;
 
-            house.add(body, roof);
-            house.position.set(x, 0, z);
-            buildings.add(house);
-            
+            group.add(body, roof);
+            group.position.set(x, 0, z);
+            buildingsGroup.add(group);
+
+            incomePerMin += type === 'house' ? 10 : 30;
+            updateUI();
             tg.HapticFeedback.notificationOccurred('success');
+        }
+
+        function upgradeObject() {
+            const obj = selectedObject;
+            const cost = obj.userData.type === 'house' ? 200 : 600;
+            if (balance < cost) return alert("Нужно больше золота!");
+
+            balance -= cost;
+            obj.userData.level++;
+            obj.scale.set(1, 1 + (obj.userData.level * 0.2), 1);
+            obj.position.y = 0; // Корректировка
+            
+            incomePerMin += obj.userData.type === 'house' ? 15 : 45;
+            document.getElementById('object-menu').style.display = 'none';
+            updateUI();
+            tg.HapticFeedback.impactOccurred('heavy');
+        }
+
+        function sellObject() {
+            const obj = selectedObject;
+            const refund = obj.userData.type === 'house' ? 70 : 210;
+            balance += refund;
+            incomePerMin -= (obj.userData.type === 'house' ? 10 : 30) * obj.userData.level;
+            buildingsGroup.remove(obj);
+            document.getElementById('object-menu').style.display = 'none';
+            updateUI();
+            tg.HapticFeedback.impactOccurred('medium');
         }
 
         function updateUI() {
             document.getElementById('balance').innerText = Math.floor(balance).toLocaleString();
+            document.getElementById('income').innerText = incomePerMin;
         }
+
+        // Доход раз в минуту
+        setInterval(() => {
+            if(incomePerMin > 0) {
+                balance += incomePerMin;
+                updateUI();
+                tg.HapticFeedback.impactOccurred('light');
+            }
+        }, 60000);
 
         function animate() {
             requestAnimationFrame(animate);
