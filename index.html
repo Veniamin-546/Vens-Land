@@ -3,107 +3,165 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Vens Land</title>
+    <title>Vens Land 3D</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        :root { --bg-color: #8fce00; --panel-color: rgba(0,0,0,0.6); --accent: #ffcc00; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); margin: 0; color: white; user-select: none; overflow: hidden; }
+        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Arial', sans-serif; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
-        #header { background: var(--panel-color); padding: 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid rgba(0,0,0,0.2); }
-        .stat-box { text-align: center; }
-        .stat-value { font-size: 20px; font-weight: bold; color: var(--accent); }
-
-        #game-world { height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        .panel { position: absolute; background: rgba(255, 255, 255, 0.2); backdrop-filter: blur(10px); 
+                 border-radius: 20px; border: 1px solid rgba(255,255,255,0.3); padding: 15px; pointer-events: auto; }
         
-        /* Анимация домика */
-        .house-stage { width: 180px; transition: transform 0.1s; cursor: pointer; filter: drop-shadow(0 10px 5px rgba(0,0,0,0.2)); }
-        .house-stage:active { transform: scale(0.95); }
-
-        #controls { padding: 20px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+        #stats { top: 20px; left: 20px; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+        #controls { bottom: 30px; left: 50%; transform: translateX(-50%); width: 80%; text-align: center; }
         
-        .btn { background: var(--accent); color: #333; border: none; padding: 15px 40px; border-radius: 20px; 
-               font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 6px 0 #ccaa00; width: 80%; }
-        .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #ccaa00; }
-        .btn:disabled { background: #ccc; box-shadow: 0 4px 0 #999; cursor: not-allowed; }
-
-        #timer-display { font-size: 14px; margin-top: 5px; color: #fff; background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 10px; }
+        .btn { background: #ffcc00; color: #333; border: none; padding: 15px 30px; border-radius: 15px; 
+               font-weight: bold; font-size: 18px; cursor: pointer; box-shadow: 0 5px 0 #ccaa00; width: 100%; pointer-events: auto; }
+        .btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #ccaa00; }
+        
+        .currency { color: #2ecc71; font-weight: bold; font-size: 24px; }
     </style>
 </head>
 <body>
 
-    <div id="header">
-        <div class="stat-box">БАКСЫ<br><span id="balance">0</span> 💵</div>
-        <div class="stat-box">УРОВЕНЬ<br><span id="level">1</span> 🏠</div>
-    </div>
+    <div id="ui">
+        <div id="stats" class="panel">
+            <div>БАКСЫ: <span id="balance" class="currency">0</span> 💵</div>
+            <div>УРОВЕНЬ: <span id="level">1</span></div>
+        </div>
 
-    <div id="game-world">
-        <img src="https://cdn-icons-png.flaticon.com/512/2318/2318277.png" id="house-img" class="house-stage" onclick="manualClick()">
-        <div id="timer-display">До аренды: <span id="timer">05:00</span></div>
-    </div>
-
-    <div id="controls">
-        <button class="btn" id="upgrade-btn" onclick="upgrade()">УЛУЧШИТЬ (100 $)</button>
-        <p style="font-size: 12px; opacity: 0.8;">Каждые 5 мин. капает доход!</p>
+        <div id="controls">
+            <button class="btn" id="upgrade-btn" onclick="upgrade()">УЛУЧШИТЬ ДОМ (100 $)</button>
+            <div style="color: white; margin-top: 10px; font-size: 12px;">Таймер аренды: <span id="timer">05:00</span></div>
+        </div>
     </div>
 
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
 
+        // Данные игры
         let balance = 0;
         let level = 1;
-        let incomePerCycle = 50;
         let upgradeCost = 100;
-        let secondsLeft = 300; // 5 минут
+        let secondsLeft = 300;
 
-        // Логика таймера (авто-доход)
-        setInterval(() => {
-            secondsLeft--;
-            if (secondsLeft <= 0) {
-                balance += incomePerCycle;
-                secondsLeft = 300;
-                tg.HapticFeedback.notificationOccurred('success'); // Вибрация при деньгах
-            }
-            updateUI();
-        }, 1000);
+        // --- 3D ГРАФИКА (Three.js) ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // Небо
 
-        function manualClick() {
-            balance += 1; // Маленький бонус за клик
-            tg.HapticFeedback.impactOccurred('light'); 
-            updateUI();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(5, 5, 5);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // Свет
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 10, 7.5);
+        light.castShadow = true;
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x404040, 1.5));
+
+        // Земля
+        const groundGeo = new THREE.PlaneGeometry(20, 20);
+        const groundMat = new THREE.MeshPhongMaterial({ color: 0x7cfc00 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Группа для дома (чтобы легко менять)
+        const houseGroup = new THREE.Group();
+        scene.add(houseGroup);
+
+        function createHouse(lvl) {
+            // Очищаем старый дом
+            while(houseGroup.children.length > 0) houseGroup.remove(houseGroup.children[0]);
+
+            // Стены (Куб)
+            const bodyGeo = new THREE.BoxGeometry(2, lvl * 0.5 + 1, 2);
+            const bodyMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = (lvl * 0.5 + 1) / 2;
+            body.castShadow = true;
+            houseGroup.add(body);
+
+            // Крыша (Пирамида)
+            const roofGeo = new THREE.ConeGeometry(1.8, 1.5, 4);
+            const roofMat = new THREE.MeshPhongMaterial({ color: 0xe74c3c });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.y = (lvl * 0.5 + 1) + 0.75;
+            roof.rotation.y = Math.PI / 4;
+            roof.castShadow = true;
+            houseGroup.add(roof);
+
+            // Анимация появления
+            houseGroup.scale.set(0,0,0);
         }
 
+        createHouse(level);
+
+        // --- ЛОГИКА ---
         function upgrade() {
             if (balance >= upgradeCost) {
                 balance -= upgradeCost;
                 level++;
-                incomePerCycle += 40;
-                upgradeCost = Math.floor(upgradeCost * 2.5);
-                
-                // Визуально меняем домик на 3 уровне
-                if(level == 3) document.getElementById('house-img').src = 'https://cdn-icons-png.flaticon.com/512/619/619153.png';
-                // На 5 уровне
-                if(level == 5) document.getElementById('house-img').src = 'https://cdn-icons-png.flaticon.com/512/2590/2590525.png';
-
+                upgradeCost *= 2;
+                createHouse(level);
+                tg.HapticFeedback.notificationOccurred('success');
                 updateUI();
             }
         }
 
         function updateUI() {
-            document.getElementById('balance').innerText = balance;
+            document.getElementById('balance').innerText = Math.floor(balance);
             document.getElementById('level').innerText = level;
-            document.getElementById('upgrade-btn').innerText = `УЛУЧШИТЬ (${upgradeCost} $)`;
+            document.getElementById('upgrade-btn').innerText = `УЛУЧШИТЬ ДОМ (${upgradeCost} $)`;
+        }
+
+        // Рендер и анимация
+        function animate() {
+            requestAnimationFrame(animate);
             
-            // Форматируем таймер
+            // Плавное появление дома
+            if (houseGroup.scale.x < 1) {
+                houseGroup.scale.x += 0.05;
+                houseGroup.scale.y += 0.05;
+                houseGroup.scale.z += 0.05;
+            }
+
+            // Медленное вращение для красоты
+            houseGroup.rotation.y += 0.01;
+            
+            renderer.render(scene, camera);
+        }
+
+        // Авто-доход и таймер
+        setInterval(() => {
+            secondsLeft--;
+            if(secondsLeft <= 0) {
+                balance += 50 * level;
+                secondsLeft = 300;
+            }
             let mins = Math.floor(secondsLeft / 60);
             let secs = secondsLeft % 60;
             document.getElementById('timer').innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            updateUI();
+        }, 1000);
 
-            // Выключаем кнопку если мало денег
-            document.getElementById('upgrade-btn').disabled = (balance < upgradeCost);
-        }
+        animate();
 
-        updateUI();
+        // Адаптация под размер экрана
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
