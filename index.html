@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vens Land</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root { --bg-color: #8fce00; --panel-color: rgba(0,0,0,0.6); --accent: #ffcc00; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg-color); margin: 0; color: white; user-select: none; overflow: hidden; }
+        
+        #header { background: var(--panel-color); padding: 15px; display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid rgba(0,0,0,0.2); }
+        .stat-box { text-align: center; }
+        .stat-value { font-size: 20px; font-weight: bold; color: var(--accent); }
+
+        #game-world { height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+        
+        /* Анимация домика */
+        .house-stage { width: 180px; transition: transform 0.1s; cursor: pointer; filter: drop-shadow(0 10px 5px rgba(0,0,0,0.2)); }
+        .house-stage:active { transform: scale(0.95); }
+
+        #controls { padding: 20px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+        
+        .btn { background: var(--accent); color: #333; border: none; padding: 15px 40px; border-radius: 20px; 
+               font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 6px 0 #ccaa00; width: 80%; }
+        .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #ccaa00; }
+        .btn:disabled { background: #ccc; box-shadow: 0 4px 0 #999; cursor: not-allowed; }
+
+        #timer-display { font-size: 14px; margin-top: 5px; color: #fff; background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="header">
+        <div class="stat-box">БАКСЫ<br><span id="balance">0</span> 💵</div>
+        <div class="stat-box">УРОВЕНЬ<br><span id="level">1</span> 🏠</div>
+    </div>
+
+    <div id="game-world">
+        <img src="https://cdn-icons-png.flaticon.com/512/2318/2318277.png" id="house-img" class="house-stage" onclick="manualClick()">
+        <div id="timer-display">До аренды: <span id="timer">05:00</span></div>
+    </div>
+
+    <div id="controls">
+        <button class="btn" id="upgrade-btn" onclick="upgrade()">УЛУЧШИТЬ (100 $)</button>
+        <p style="font-size: 12px; opacity: 0.8;">Каждые 5 мин. капает доход!</p>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+
+        let balance = 0;
+        let level = 1;
+        let incomePerCycle = 50;
+        let upgradeCost = 100;
+        let secondsLeft = 300; // 5 минут
+
+        // Логика таймера (авто-доход)
+        setInterval(() => {
+            secondsLeft--;
+            if (secondsLeft <= 0) {
+                balance += incomePerCycle;
+                secondsLeft = 300;
+                tg.HapticFeedback.notificationOccurred('success'); // Вибрация при деньгах
+            }
+            updateUI();
+        }, 1000);
+
+        function manualClick() {
+            balance += 1; // Маленький бонус за клик
+            tg.HapticFeedback.impactOccurred('light'); 
+            updateUI();
+        }
+
+        function upgrade() {
+            if (balance >= upgradeCost) {
+                balance -= upgradeCost;
+                level++;
+                incomePerCycle += 40;
+                upgradeCost = Math.floor(upgradeCost * 2.5);
+                
+                // Визуально меняем домик на 3 уровне
+                if(level == 3) document.getElementById('house-img').src = 'https://cdn-icons-png.flaticon.com/512/619/619153.png';
+                // На 5 уровне
+                if(level == 5) document.getElementById('house-img').src = 'https://cdn-icons-png.flaticon.com/512/2590/2590525.png';
+
+                updateUI();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('balance').innerText = balance;
+            document.getElementById('level').innerText = level;
+            document.getElementById('upgrade-btn').innerText = `УЛУЧШИТЬ (${upgradeCost} $)`;
+            
+            // Форматируем таймер
+            let mins = Math.floor(secondsLeft / 60);
+            let secs = secondsLeft % 60;
+            document.getElementById('timer').innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+
+            // Выключаем кнопку если мало денег
+            document.getElementById('upgrade-btn').disabled = (balance < upgradeCost);
+        }
+
+        updateUI();
+    </script>
+</body>
+</html>
