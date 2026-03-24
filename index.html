@@ -3,51 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Vens Land: Reality</title>
+    <title>Vens Land: Real Estate</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: 'Helvetica', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #a2d2ff; font-family: 'Helvetica Neue', sans-serif; }
         #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
-        /* Реалистичный интерфейс: минимализм и стекло */
-        .glass-panel {
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: white;
-            padding: 12px 20px;
-            border-radius: 12px;
-            pointer-events: auto;
-        }
+        /* Интерфейс "Премиум" */
+        .glass { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.1); pointer-events: auto; }
+        
+        #top-info { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; padding: 15px 25px; border: 1px solid rgba(255,255,255,0.4); }
+        .currency { color: #27ae60; font-weight: 800; font-size: 22px; }
+        
+        #upgrade-panel { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 90%; padding: 20px; text-align: center; }
+        
+        .btn-main { background: #1a1a1a; color: white; border: none; padding: 18px; width: 100%; border-radius: 15px; font-size: 16px; font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: 0.3s; }
+        .btn-main:active { transform: scale(0.98); background: #333; }
+        .btn-main:disabled { background: #ccc; cursor: not-allowed; }
 
-        #stats { position: absolute; top: 20px; right: 20px; display: flex; align-items: center; gap: 10px; }
-        #level-info { position: absolute; top: 20px; left: 20px; border-left: 4px solid #ffcc00; }
-
-        .btn-build {
-            position: absolute; bottom: 30px; right: 20px;
-            background: #ffffff; color: #000; border: none;
-            padding: 18px 35px; border-radius: 8px;
-            font-weight: 900; font-size: 16px; cursor: pointer;
-            text-transform: uppercase; letter-spacing: 1px;
-            pointer-events: auto; transition: 0.2s;
-        }
-        .btn-build:active { transform: scale(0.95); background: #eee; }
-
-        #timer { position: absolute; bottom: 30px; left: 20px; font-size: 12px; color: rgba(255,255,255,0.5); }
+        #timer-text { font-size: 12px; color: #666; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
     <div id="ui">
-        <div id="level-info" class="glass-panel">РАЙОН: <span id="level">1</span></div>
-        <div id="stats" class="glass-panel">
-            <span style="opacity: 0.6; font-size: 12px;">БАЛАНС:</span>
-            <span id="balance" style="color: #2ecc71; font-weight: bold;">0</span>
-            <span style="color: #ffcc00;">$</span>
+        <div id="top-info" class="glass">
+            <div>УРОВЕНЬ: <span id="level-val" style="font-weight:900">1</span></div>
+            <div class="currency"><span id="balance">0</span> $</div>
         </div>
-        <div id="timer">СЛЕДУЮЩЕЕ ПОСТУПЛЕНИЕ: <span id="time-val">05:00</span></div>
-        <button class="btn-build" onclick="upgrade()">Улучшить объект — <span id="cost">100</span>$</button>
+
+        <div id="upgrade-panel" class="glass">
+            <div id="timer-text">АРЕНДА ЧЕРЕЗ: <span id="time-val">05:00</span></div>
+            <button class="btn-main" id="up-btn" onclick="upgrade()">Улучшить до уровня <span id="next-lvl">2</span> — <span id="cost">100</span>$</button>
+        </div>
     </div>
 
     <script>
@@ -59,36 +48,34 @@
         let upgradeCost = 100;
         let secondsLeft = 300;
 
-        // --- SCENE SETUP ---
+        // --- 3D SETUP ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x222222);
-        scene.fog = new THREE.Fog(0x222222, 10, 50);
+        scene.background = new THREE.Color(0xddeeff); // Нежно-голубое небо
 
-        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(12, 12, 12);
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(15, 15, 15);
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.toneMapping = THREE.ReinhardToneMapping; // Для реалистичного света
         renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         document.body.appendChild(renderer.domElement);
 
-        // --- REALISTIC LIGHTING ---
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-        scene.add(ambientLight);
+        // Свет (Солнечный день)
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const sun = new THREE.DirectionalLight(0xffffff, 1);
+        sun.position.set(10, 20, 10);
+        sun.castShadow = true;
+        sun.shadow.mapSize.width = 2048;
+        sun.shadow.mapSize.height = 2048;
+        scene.add(sun);
 
-        const spotLight = new THREE.SpotLight(0xffffff, 1.5);
-        spotLight.position.set(10, 20, 10);
-        spotLight.castShadow = true;
-        spotLight.shadow.mapSize.width = 1024;
-        spotLight.shadow.mapSize.height = 1024;
-        scene.add(spotLight);
-
-        // --- GROUND (Asphalt/Concrete) ---
-        const groundGeo = new THREE.PlaneGeometry(100, 100);
-        const groundMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
-        const ground = new THREE.Mesh(groundGeo, groundMat);
+        // Газон (Сочный зеленый)
+        const ground = new THREE.Mesh(
+            new THREE.CircleGeometry(20, 32),
+            new THREE.MeshStandardMaterial({ color: 0x558833, roughness: 0.8 })
+        );
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
@@ -96,56 +83,55 @@
         const houseGroup = new THREE.Group();
         scene.add(houseGroup);
 
-        function createRealisticHouse(lvl) {
+        // Конструктор дизайнов
+        function buildDesign(lvl) {
             while(houseGroup.children.length > 0) houseGroup.remove(houseGroup.children[0]);
 
-            // Фундамент
-            const baseGeo = new THREE.BoxGeometry(4.2, 0.3, 4.2);
-            const baseMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
-            const base = new THREE.Mesh(baseGeo, baseMat);
-            base.position.y = 0.15;
-            base.receiveShadow = true;
-            houseGroup.add(base);
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+            const woodMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.7 });
+            const glassMat = new THREE.MeshStandardMaterial({ color: 0xaaddff, transparent: true, opacity: 0.6, metalness: 0.9, roughness: 0.1 });
 
-            // Стены (Тёмный современный кирпич/бетон)
-            const wallHeight = 2.5 + (lvl * 0.2);
-            const wallsGeo = new THREE.BoxGeometry(4, wallHeight, 4);
-            const wallsMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.9 });
-            const walls = new THREE.Mesh(wallsGeo, wallsMat);
-            walls.position.y = wallHeight / 2 + 0.3;
-            walls.castShadow = true;
-            houseGroup.add(walls);
-
-            // Крыша (Плоская современная или скатная)
-            const roofGeo = new THREE.BoxGeometry(4.2, 0.4, 4.2);
-            const roofMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.5 });
-            const roof = new THREE.Mesh(roofGeo, roofMat);
-            roof.position.y = wallHeight + 0.5;
-            houseGroup.add(roof);
-
-            // Окна (Светящиеся)
-            const winGeo = new THREE.PlaneGeometry(0.8, 1.2);
-            const winMat = new THREE.MeshStandardMaterial({ 
-                color: 0xffffaa, 
-                emissive: 0xffffaa, 
-                emissiveIntensity: 0.5 
-            });
-            for(let i=0; i<4; i++) {
-                const windowMesh = new THREE.Mesh(winGeo, winMat);
-                windowMesh.position.set(1, 1.5, 2.01);
-                houseGroup.add(windowMesh);
+            if (lvl === 1) {
+                // Маленький современный куб
+                const base = new THREE.Mesh(new THREE.BoxGeometry(4, 2.5, 4), wallMat);
+                base.position.y = 1.25;
+                const window = new THREE.Mesh(new THREE.BoxGeometry(4.1, 1, 2), glassMat);
+                window.position.y = 1.25;
+                houseGroup.add(base, window);
+            } 
+            else if (lvl === 2) {
+                // Дом из двух блоков со смещением
+                const b1 = new THREE.Mesh(new THREE.BoxGeometry(5, 2.5, 4), wallMat);
+                b1.position.set(0, 1.25, 0);
+                const b2 = new THREE.Mesh(new THREE.BoxGeometry(3, 2.5, 4), woodMat);
+                b2.position.set(1.5, 3.75, 0);
+                const win = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.5, 4.1), glassMat);
+                win.position.set(1.5, 3.75, 0);
+                houseGroup.add(b1, b2, win);
+            } 
+            else {
+                // Вилла (L-образная)
+                const main = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 3), wallMat);
+                main.position.y = 1.5;
+                const wing = new THREE.Mesh(new THREE.BoxGeometry(3, 6, 3), wallMat);
+                wing.position.set(-1.5, 3, 3);
+                const balcony = new THREE.Mesh(new THREE.BoxGeometry(3, 0.2, 3), woodMat);
+                balcony.position.set(-1.5, 4.5, 3);
+                houseGroup.add(main, wing, balcony);
             }
+
+            houseGroup.children.forEach(m => { m.castShadow = true; m.receiveShadow = true; });
         }
 
-        createRealisticHouse(level);
+        buildDesign(level);
 
-        // --- LOGIC ---
+        // --- ЛОГИКА ---
         function upgrade() {
             if (balance >= upgradeCost) {
                 balance -= upgradeCost;
                 level++;
-                upgradeCost = Math.floor(upgradeCost * 2.5);
-                createRealisticHouse(level);
+                upgradeCost = Math.floor(upgradeCost * 2.8);
+                buildDesign(level);
                 tg.HapticFeedback.notificationOccurred('success');
                 updateUI();
             }
@@ -153,8 +139,10 @@
 
         function updateUI() {
             document.getElementById('balance').innerText = Math.floor(balance);
-            document.getElementById('level').innerText = level;
+            document.getElementById('level-val').innerText = level;
+            document.getElementById('next-lvl').innerText = level + 1;
             document.getElementById('cost').innerText = upgradeCost;
+            document.getElementById('up-btn').disabled = (balance < upgradeCost);
         }
 
         function animate() {
@@ -165,8 +153,9 @@
         setInterval(() => {
             secondsLeft--;
             if(secondsLeft <= 0) {
-                balance += 100 * level;
+                balance += 150 * level;
                 secondsLeft = 300;
+                tg.HapticFeedback.impactOccurred('medium');
             }
             let mins = Math.floor(secondsLeft / 60);
             let secs = secondsLeft % 60;
