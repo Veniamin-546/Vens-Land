@@ -3,47 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Vens Land: Build & Wait</title>
+    <title>Vens Land: Grid Strategy</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background: #a2d2ff; font-family: 'Segoe UI', sans-serif; }
-        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
         .glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border-radius: 12px; pointer-events: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
         
-        #stats { position: absolute; top: 15px; left: 15px; padding: 10px 20px; border-left: 5px solid #2ecc71; font-weight: bold; }
-        
-        /* Кнопка постройки прямо в мире */
-        #context-menu { 
-            position: absolute; display: none; transform: translate(-50%, -100%); 
-            padding: 10px; z-index: 100; pointer-events: auto;
+        #stats { position: absolute; top: 15px; left: 15px; padding: 10px 20px; font-weight: bold; font-size: 18px; border-bottom: 3px solid #2ecc71; }
+        #income-info { position: absolute; top: 15px; right: 15px; padding: 10px; font-size: 12px; color: #27ae60; }
+
+        /* Меню стройки */
+        #build-menu { 
+            position: absolute; display: none; transform: translate(-50%, -120%); 
+            padding: 10px; z-index: 100; pointer-events: auto; text-align: center;
         }
         .btn-build { 
-            background: #2ecc71; color: white; border: none; padding: 10px 15px; 
-            border-radius: 8px; font-weight: bold; cursor: pointer; 
+            background: #2ecc71; color: white; border: none; padding: 10px 20px; 
+            border-radius: 8px; font-weight: bold; cursor: pointer; white-space: nowrap;
         }
+        .btn-build:active { background: #27ae60; }
 
-        /* Индикатор стройки */
-        .progress-container {
-            position: absolute; width: 60px; height: 10px; background: rgba(0,0,0,0.5);
-            border-radius: 5px; overflow: hidden; display: none;
+        /* Таймер над клеткой */
+        .build-timer {
+            position: absolute; display: none; transform: translate(-50%, -100%);
+            background: rgba(0,0,0,0.7); color: #ffcc00; padding: 5px 10px;
+            border-radius: 5px; font-size: 14px; font-weight: bold; pointer-events: none;
         }
-        .progress-bar { width: 0%; height: 100%; background: #ffcc00; transition: width 0.1s linear; }
     </style>
 </head>
 <body>
 
     <div id="ui">
-        <div id="stats" class="glass">БАЛАНС: <span id="balance" style="color:#2ecc71">0</span> $</div>
+        <div id="stats" class="glass">БАЛАНС: <span id="balance">1000000</span> $</div>
+        <div id="income-info" class="glass">ДОХОД: +<span id="total-income">0</span> $/мин</div>
 
-        <div id="context-menu" class="glass">
-            <button class="btn-build" onclick="confirmBuild()">ПОСТРОИТЬ (100$)</button>
+        <div id="build-menu" class="glass">
+            <button class="btn-build" onclick="startBuilding()">ПОСТРОИТЬ (100$)</button>
         </div>
 
-        <div id="progress-ui" class="progress-container">
-            <div id="p-bar" class="progress-bar"></div>
-        </div>
+        <div id="timer-label" class="build-timer">СТРОЙКА: 5с</div>
     </div>
 
     <script>
@@ -51,14 +52,15 @@
         tg.expand();
 
         let balance = 1000000;
-        let selectedPos = { x: 0, z: 0 };
-        let isBuilding = false;
+        let totalIncome = 0;
+        let selectedCell = { x: 0, z: 0 };
+        let occupiedCells = new Set(); // Чтобы не строить дом на доме
 
         // --- THREE.JS ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(12, 12, 12);
+        camera.position.set(15, 18, 15);
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -68,28 +70,31 @@
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.7));
         const sun = new THREE.DirectionalLight(0xffffff, 1);
-        sun.position.set(10, 20, 10);
+        sun.position.set(10, 25, 10);
         sun.castShadow = true;
         scene.add(sun);
 
+        // Поле 20x20 метров (10x10 клеток по 2 метра)
         const ground = new THREE.Mesh(
-            new THREE.PlaneGeometry(40, 40),
+            new THREE.PlaneGeometry(30, 30),
             new THREE.MeshStandardMaterial({ color: 0x55aa44 })
         );
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
 
+        const grid = new THREE.GridHelper(30, 15, 0x448833, 0x448833);
+        grid.position.y = 0.05;
+        scene.add(grid);
+
         const buildings = new THREE.Group();
         scene.add(buildings);
 
-        // --- ЛОГИКА ВЗАИМОДЕЙСТВИЯ ---
+        // --- ЛОГИКА ---
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
 
         window.addEventListener('pointerdown', (event) => {
-            if (isBuilding) return;
-
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -98,68 +103,106 @@
 
             if (intersects.length > 0) {
                 const pos = intersects[0].point;
-                selectedPos.x = Math.round(pos.x / 2) * 2;
-                selectedPos.z = Math.round(pos.z / 2) * 2;
+                // Сетка с шагом 2
+                let gx = Math.round(pos.x / 2) * 2;
+                let gz = Math.round(pos.z / 2) * 2;
 
-                // Показываем кнопку в месте клика
-                const menu = document.getElementById('context-menu');
+                if (occupiedCells.has(`${gx},${gz}`)) {
+                    document.getElementById('build-menu').style.display = 'none';
+                    return;
+                }
+
+                selectedCell.x = gx;
+                selectedCell.z = gz;
+
+                const menu = document.getElementById('build-menu');
                 menu.style.display = 'block';
                 menu.style.left = event.clientX + 'px';
                 menu.style.top = event.clientY + 'px';
             } else {
-                document.getElementById('context-menu').style.display = 'none';
+                document.getElementById('build-menu').style.display = 'none';
             }
         });
 
-        function confirmBuild() {
-            if (balance < 100) return alert("Мало баксов!");
+        function startBuilding() {
+            if (balance < 100) return alert("Недостаточно денег!");
             
             balance -= 100;
-            isBuilding = true;
-            document.getElementById('context-menu').style.display = 'none';
+            const cellKey = `${selectedCell.x},${selectedCell.z}`;
+            occupiedCells.add(cellKey);
+            
+            document.getElementById('build-menu').style.display = 'none';
             updateUI();
 
-            // Показываем полоску загрузки
-            const pContainer = document.getElementById('progress-ui');
-            const pBar = document.getElementById('p-bar');
-            
-            // Позиционируем полоску над точкой
-            pContainer.style.display = 'block';
-            pContainer.style.left = (window.innerWidth / 2) + "px"; // Упростим для теста
-            pContainer.style.top = (window.innerHeight / 2) + "px";
+            // Создаем визуальный эффект стройки (прозрачный каркас)
+            const ghost = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 0.5, 1.5),
+                new THREE.MeshStandardMaterial({ color: 0xffcc00, transparent: true, opacity: 0.5 })
+            );
+            ghost.position.set(selectedCell.x, 0.25, selectedCell.z);
+            scene.add(ghost);
 
-            let progress = 0;
-            let interval = setInterval(() => {
-                progress += 2;
-                pBar.style.width = progress + "%";
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    finishBuilding();
+            // Показываем таймер
+            const timerLabel = document.getElementById('timer-label');
+            timerLabel.style.display = 'block';
+            
+            let timeLeft = 5;
+            timerLabel.innerText = `СТРОЙКА: ${timeLeft}с`;
+
+            let buildInt = setInterval(() => {
+                timeLeft--;
+                timerLabel.innerText = `СТРОЙКА: ${timeLeft}с`;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(buildInt);
+                    scene.remove(ghost);
+                    timerLabel.style.display = 'none';
+                    spawnHouse(selectedCell.x, selectedCell.z);
                 }
-            }, 100); // 100 мс * 50 итераций = 5 секунд
+            }, 1000);
+            
+            tg.HapticFeedback.impactOccurred('medium');
         }
 
-        function finishBuilding() {
+        function spawnHouse(x, z) {
             const house = new THREE.Group();
-            const body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.4, 1.6), new THREE.MeshStandardMaterial({color: 0xffffff}));
+            
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(1.6, 1.4, 1.6),
+                new THREE.MeshStandardMaterial({ color: 0xffffff })
+            );
             body.position.y = 0.7;
-            const roof = new THREE.Mesh(new THREE.ConeGeometry(1.3, 0.8, 4), new THREE.MeshStandardMaterial({color: 0xaa3333}));
+            
+            const roof = new THREE.Mesh(
+                new THREE.ConeGeometry(1.3, 0.8, 4),
+                new THREE.MeshStandardMaterial({ color: 0xaa3333 })
+            );
             roof.position.y = 1.5;
             roof.rotation.y = Math.PI/4;
-            
+
             house.add(body, roof);
-            house.position.set(selectedPos.x, 0, selectedPos.z);
+            house.position.set(x, 0, z);
             buildings.add(house);
 
-            document.getElementById('progress-ui').style.display = 'none';
-            document.getElementById('p-bar').style.width = "0%";
-            isBuilding = false;
+            totalIncome += 10;
+            updateUI();
             tg.HapticFeedback.notificationOccurred('success');
         }
 
         function updateUI() {
             document.getElementById('balance').innerText = Math.floor(balance).toLocaleString();
+            document.getElementById('total-income').innerText = totalIncome;
         }
+
+        // Цикл дохода: каждую минуту (60 сек)
+        setInterval(() => {
+            if (totalIncome > 0) {
+                balance += totalIncome;
+                updateUI();
+                // Легкое уведомление о получении денег
+                tg.HapticFeedback.impactOccurred('light');
+            }
+        }, 60000);
 
         function animate() {
             requestAnimationFrame(animate);
