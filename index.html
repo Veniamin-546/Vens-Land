@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Vens Land: Dev Edition</title>
+    <title>Vens Land: Build & Sell</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
@@ -12,31 +12,33 @@
         
         .glass { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(15px); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.15); pointer-events: auto; }
         
-        #top-info { position: absolute; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; padding: 15px 25px; border: 1px solid rgba(255,255,255,0.4); }
-        .currency { color: #27ae60; font-weight: 800; font-size: 22px; }
-        
-        #upgrade-panel { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 90%; padding: 20px; text-align: center; }
-        
-        .btn-main { background: #1a1a1a; color: white; border: none; padding: 18px; width: 100%; border-radius: 15px; font-size: 16px; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: 0.2s; }
-        .btn-main:active { transform: scale(0.95); }
-        .btn-main:disabled { background: #ccc; }
+        #top-info { position: absolute; top: 15px; left: 15px; right: 15px; display: flex; justify-content: space-between; padding: 12px 20px; }
+        .currency { color: #27ae60; font-weight: 800; font-size: 20px; }
 
-        #debug-reset { position: absolute; top: 100px; right: 20px; font-size: 10px; color: red; cursor: pointer; pointer-events: auto; }
+        /* Нижнее меню */
+        #bottom-menu { position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%); width: 90%; display: flex; gap: 10px; justify-content: center; }
+        
+        .btn-action { flex: 1; background: #1a1a1a; color: white; border: none; padding: 15px; border-radius: 12px; font-size: 14px; font-weight: bold; cursor: pointer; text-transform: uppercase; }
+        .btn-sell { background: #e74c3c; }
+        .btn-build { background: #2ecc71; }
+        .btn-action:active { transform: scale(0.95); }
+
+        #build-instruction { position: absolute; top: 100px; left: 50%; transform: translateX(-50%); color: white; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px; display: none; }
     </style>
 </head>
 <body>
 
     <div id="ui">
         <div id="top-info" class="glass">
-            <div>LVL: <span id="level-val" style="font-weight:900">1</span></div>
+            <div>VENS LAND</div>
             <div class="currency"><span id="balance">0</span> $</div>
         </div>
 
-        <div id="debug-reset" onclick="resetGame()">[СБРОСИТЬ ПРОГРЕСС]</div>
+        <div id="build-instruction">ТЫКНИ НА ТРАВУ, ЧТОБЫ ПОСТАВИТЬ ДОМ</div>
 
-        <div id="upgrade-panel" class="glass">
-            <div style="font-size: 12px; margin-bottom: 5px;">ДОХОД ЧЕРЕЗ: <span id="time-val">05:00</span></div>
-            <button class="btn-main" id="up-btn" onclick="upgrade()">СТРОИТЬ УРОВЕНЬ <span id="next-lvl">2</span> — <span id="cost">100</span>$</button>
+        <div id="bottom-menu">
+            <button class="btn-action btn-build" onclick="startBuildMode()">➕ ПОСТРОИТЬ</button>
+            <button class="btn-action btn-sell" onclick="sellSelected()">💰 ПРОДАТЬ</button>
         </div>
     </div>
 
@@ -44,27 +46,15 @@
         let tg = window.Telegram.WebApp;
         tg.expand();
 
-        // --- ЗАГРУЗКА ДАННЫХ ИЛИ ДЕБАГ ---
-        let balance = Number(localStorage.getItem('vens_balance')) || 1000000; // Твои "дофига денег"
-        let level = Number(localStorage.getItem('vens_level')) || 1;
-        let upgradeCost = Math.floor(100 * Math.pow(2.5, level - 1));
-        let secondsLeft = 300;
-
-        function saveData() {
-            localStorage.setItem('vens_balance', balance);
-            localStorage.setItem('vens_level', level);
-        }
-
-        function resetGame() {
-            localStorage.clear();
-            location.reload();
-        }
+        let balance = Number(localStorage.getItem('vens_balance')) || 1000000;
+        let buildings = JSON.parse(localStorage.getItem('vens_buildings')) || [];
+        let isBuildMode = false;
 
         // --- 3D ENGINE ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xddeeff);
-        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(18, 18, 18);
+        scene.background = new THREE.Color(0xa2d2ff);
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(20, 20, 20);
         camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -72,81 +62,100 @@
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-        sun.position.set(10, 20, 15);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const sun = new THREE.DirectionalLight(0xffffff, 1);
+        sun.position.set(10, 20, 10);
         sun.castShadow = true;
         scene.add(sun);
 
+        // Земля с сеткой
         const ground = new THREE.Mesh(
-            new THREE.CircleGeometry(25, 32),
-            new THREE.MeshStandardMaterial({ color: 0x669944, roughness: 0.8 })
+            new THREE.PlaneGeometry(40, 40),
+            new THREE.MeshStandardMaterial({ color: 0x55aa44, roughness: 0.8 })
         );
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         scene.add(ground);
 
-        const houseGroup = new THREE.Group();
-        scene.add(houseGroup);
+        const grid = new THREE.GridHelper(40, 20, 0x448833, 0x448833);
+        grid.position.y = 0.01;
+        scene.add(grid);
 
-        // --- КРУТЫЕ ДИЗАЙНЫ ДОМОВ ---
-        function buildHouse(lvl) {
-            while(houseGroup.children.length > 0) houseGroup.remove(houseGroup.children[0]);
+        // Группа для всех домов
+        const buildingsGroup = new THREE.Group();
+        scene.add(buildingsGroup);
 
-            const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
-            const darkMat = new THREE.MeshStandardMaterial({ color: 0x222222 });
-            const glassMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, transparent: true, opacity: 0.7, metalness: 0.9 });
-
-            if(lvl === 1) {
-                // Маленький хай-тек бокс
-                const body = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 4), wallMat);
-                body.position.y = 1.5;
-                const glass = new THREE.Mesh(new THREE.BoxGeometry(4.1, 1.2, 2), glassMat);
-                glass.position.set(0, 1.5, 1);
-                houseGroup.add(body, glass);
-            } else if(lvl === 2) {
-                // Вилла из двух этажей со сдвигом
-                const f1 = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 4), wallMat);
-                f1.position.y = 1.5;
-                const f2 = new THREE.Mesh(new THREE.BoxGeometry(4, 2.5, 4), darkMat);
-                f2.position.set(-1, 4.25, 0);
-                const g = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.5, 4.1), glassMat);
-                g.position.set(-1, 4.25, 0);
-                houseGroup.add(f1, f2, g);
-            } else {
-                // Особняк (L-образный)
-                const b1 = new THREE.Mesh(new THREE.BoxGeometry(8, 3, 4), wallMat);
-                b1.position.y = 1.5;
-                const b2 = new THREE.Mesh(new THREE.BoxGeometry(3, 7, 4), wallMat);
-                b2.position.set(-2.5, 3.5, 4);
-                const roof = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.3, 4.2), darkMat);
-                roof.position.set(-2.5, 7.1, 4);
-                houseGroup.add(b1, b2, roof);
-            }
-            houseGroup.children.forEach(m => { m.castShadow = true; m.receiveShadow = true; });
+        // --- ФУНКЦИИ СТРОИТЕЛЬСТВА ---
+        function createHouseModel(lvl) {
+            const group = new THREE.Group();
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), new THREE.MeshStandardMaterial({color: 0xffffff}));
+            wall.position.y = 1;
+            const roof = new THREE.Mesh(new THREE.ConeGeometry(1.5, 1, 4), new THREE.MeshStandardMaterial({color: 0xaa3333}));
+            roof.position.y = 2.5;
+            roof.rotation.y = Math.PI / 4;
+            group.add(wall, roof);
+            group.castShadow = true;
+            return group;
         }
 
-        buildHouse(level);
+        function startBuildMode() {
+            if(balance < 1000) { alert("Мало денег!"); return; }
+            isBuildMode = true;
+            document.getElementById('build-instruction').style.display = 'block';
+        }
 
-        // --- ЛОГИКА ---
-        function upgrade() {
-            if (balance >= upgradeCost) {
-                balance -= upgradeCost;
-                level++;
-                upgradeCost = Math.floor(upgradeCost * 2.8);
-                buildHouse(level);
-                saveData();
-                tg.HapticFeedback.notificationOccurred('success');
+        // Клик по миру
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        window.addEventListener('click', (event) => {
+            if (!isBuildMode) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(ground);
+
+            if (intersects.length > 0) {
+                const pt = intersects[0].point;
+                // Привязка к сетке (шаг 2 метра)
+                const x = Math.round(pt.x / 2) * 2;
+                const z = Math.round(pt.z / 2) * 2;
+
+                placeHouse(x, z);
+            }
+        });
+
+        function placeHouse(x, z) {
+            const house = createHouseModel(1);
+            house.position.set(x, 0, z);
+            buildingsGroup.add(house);
+            
+            balance -= 1000;
+            isBuildMode = false;
+            document.getElementById('build-instruction').style.display = 'none';
+            save();
+            updateUI();
+            tg.HapticFeedback.impactOccurred('medium');
+        }
+
+        function sellSelected() {
+            if(buildingsGroup.children.length > 0) {
+                buildingsGroup.remove(buildingsGroup.children[buildingsGroup.children.length - 1]);
+                balance += 700;
+                save();
                 updateUI();
             }
         }
 
         function updateUI() {
             document.getElementById('balance').innerText = Math.floor(balance).toLocaleString();
-            document.getElementById('level-val').innerText = level;
-            document.getElementById('next-lvl').innerText = level + 1;
-            document.getElementById('cost').innerText = upgradeCost.toLocaleString();
-            document.getElementById('up-btn').disabled = (balance < upgradeCost);
+            localStorage.setItem('vens_balance', balance);
+        }
+
+        function save() {
+            // Тут можно сохранять массив координат домов
         }
 
         function animate() {
@@ -154,27 +163,8 @@
             renderer.render(scene, camera);
         }
 
-        setInterval(() => {
-            secondsLeft--;
-            if(secondsLeft <= 0) {
-                balance += 500 * level;
-                secondsLeft = 300;
-                saveData();
-            }
-            let mins = Math.floor(secondsLeft / 60);
-            let secs = secondsLeft % 60;
-            document.getElementById('time-val').innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-            updateUI();
-        }, 1000);
-
         animate();
         updateUI();
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     </script>
 </body>
 </html>
