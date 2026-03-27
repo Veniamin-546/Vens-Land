@@ -2,136 +2,146 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IsleBuilder: Живой город EVO</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>IsleBuilder: Beautiful City</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Inter', sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #020617; font-family: 'Inter', sans-serif; }
         canvas { display: block; touch-action: none; }
-        
-        .glass {
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-        }
-
-        .building-card {
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: pointer;
-            user-select: none;
-            border: 1px solid transparent;
-        }
-        .building-card:hover {
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateY(-2px);
-        }
-        .building-card.active {
-            background: rgba(59, 130, 246, 0.4);
-            border-color: rgba(59, 130, 246, 0.6);
-            transform: scale(1.05);
-        }
-
-        #ui-layer {
-            pointer-events: none;
-            position: absolute;
-            inset: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 1.5rem;
-            color: white;
-            z-index: 10;
-        }
+        .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .card { transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); cursor: pointer; border: 2px solid transparent; position: relative; }
+        .card.active { border-color: #60a5fa; background: rgba(59, 130, 246, 0.2); transform: translateY(-10px); box-shadow: 0 20px 25px -5px rgba(59, 130, 246, 0.3); }
+        #ui-layer { pointer-events: none; position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 2rem; color: white; z-index: 100; }
         #ui-layer > * { pointer-events: auto; }
-        .stat-value { font-variant-numeric: tabular-nums; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .stat-badge { background: rgba(255,255,255,0.05); padding: 0.5rem 1rem; border-radius: 1rem; border: 1px solid rgba(255,255,255,0.1); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .btn-war { background: linear-gradient(135deg, #ef4444 0%, #7f1d1d 100%); transition: 0.3s; }
+        .btn-war:hover { filter: brightness(1.2); transform: scale(1.05); }
     </style>
 </head>
 <body>
 
 <div id="ui-layer">
+    <!-- ВЕРХНЯЯ ПАНЕЛЬ -->
     <div class="flex justify-between items-start">
-        <div class="glass rounded-3xl p-5 flex gap-10">
-            <div class="flex flex-col">
-                <span class="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-1">Бюджет</span>
-                <span class="text-2xl font-black stat-value" id="stat-money">$10,000</span>
+        <div class="glass rounded-[2.5rem] p-6 flex gap-8 shadow-2xl items-center">
+            <div>
+                <p class="text-[10px] uppercase font-bold text-blue-400 tracking-[0.2em] mb-1">Бюджет</p>
+                <p class="text-4xl font-black text-white" id="stat-money">$1,000,000</p>
             </div>
-            <div class="flex flex-col border-l border-white/10 pl-10">
-                <span class="text-[10px] font-bold uppercase tracking-widest text-green-400 mb-1">Прибыль</span>
-                <span class="text-2xl font-black stat-value text-green-400" id="stat-income">+$50</span>
+            <div class="h-12 w-px bg-white/10"></div>
+            <div>
+                <p class="text-[10px] uppercase font-bold text-emerald-400 tracking-[0.2em] mb-1">Доход</p>
+                <p class="text-2xl font-black text-emerald-400" id="stat-income">+$0</p>
             </div>
-            <div class="flex flex-col border-l border-white/10 pl-10">
-                <span class="text-[10px] font-bold uppercase tracking-widest text-purple-400 mb-1">Жители</span>
-                <span class="text-2xl font-black stat-value" id="stat-pop">0</span>
+            <div class="h-12 w-px bg-white/10"></div>
+            <div>
+                <p class="text-[10px] uppercase font-bold text-purple-400 tracking-[0.2em] mb-1">Жители</p>
+                <p class="text-2xl font-black text-purple-400" id="stat-pop">0</p>
             </div>
         </div>
         
-        <div class="glass rounded-2xl p-4 text-right min-w-[150px]">
-            <h1 class="text-xl font-black tracking-tighter uppercase italic text-blue-500">IsleBuilder</h1>
-            <p id="time-display" class="text-xs font-bold opacity-80">День 12:00</p>
+        <div class="flex flex-col gap-2 items-end">
+            <div class="glass px-6 py-3 rounded-full border-blue-500/30">
+                <p class="text-xs font-bold tracking-widest text-blue-300" id="stat-status">🏙️ МИРНОЕ ВРЕМЯ</p>
+            </div>
         </div>
     </div>
 
-    <div class="flex justify-center gap-4 mb-4">
-        <div class="glass rounded-[2.5rem] p-3 flex gap-3">
-            <div onclick="selectBuilding('residence')" id="btn-residence" class="building-card active rounded-3xl px-6 py-3 text-center">
-                <div class="text-2xl mb-1">🏘️</div>
-                <div class="text-[10px] font-black uppercase mt-0.5">Дом</div>
-                <div class="text-[10px] text-blue-400 font-bold">$500</div>
+    <!-- ВОЕННОЕ МЕНЮ -->
+    <div id="war-panel" class="hidden absolute left-8 top-1/2 -translate-y-1/2 w-80">
+        <div class="glass rounded-[3rem] p-8 flex flex-col gap-5 border-red-500/20 shadow-2xl">
+            <div class="text-center">
+                <h3 class="text-xs font-black text-red-500 tracking-[0.5em] uppercase">Командный Центр</h3>
+                <div class="h-1 w-12 bg-red-500 mx-auto mt-2 rounded-full"></div>
             </div>
-            <div onclick="selectBuilding('commercial')" id="btn-commercial" class="building-card rounded-3xl px-6 py-3 text-center">
-                <div class="text-2xl mb-1">🏢</div>
-                <div class="text-[10px] font-black uppercase mt-0.5">Офис</div>
-                <div class="text-[10px] text-blue-400 font-bold">$1.5k</div>
+            <button onclick="spawnSquadron()" class="btn-war py-5 rounded-2xl font-black text-sm uppercase tracking-tighter shadow-lg flex items-center justify-center gap-3">
+                <span>✈️</span> ЗАПУСК ИСТРЕБИТЕЛЕЙ
+            </button>
+            <button onclick="launchMissile()" class="bg-zinc-800 hover:bg-zinc-700 py-4 rounded-2xl font-bold text-[10px] uppercase tracking-widest border border-white/10">
+                🚀 ТАКТИЧЕСКИЙ УДАР
+            </button>
+        </div>
+    </div>
+
+    <!-- НИЖНЯЯ ПАНЕЛЬ СТРОИТЕЛЬСТВА -->
+    <div class="flex flex-col items-center gap-8">
+        <div class="glass rounded-[3.5rem] p-4 flex gap-6 items-center overflow-x-auto no-scrollbar max-w-[95vw] shadow-2xl border-white/5">
+            <div onclick="selectTool('residence')" id="tool-residence" class="card active rounded-[3rem] p-6 min-w-[120px] text-center bg-white/5">
+                <span class="text-4xl block mb-2">🏡</span>
+                <p class="text-[10px] font-black uppercase text-gray-400">Жилье</p>
+                <p class="text-[10px] text-blue-400 font-bold mt-1">$1.5k</p>
             </div>
-            <div onclick="selectBuilding('industrial')" id="btn-industrial" class="building-card rounded-3xl px-6 py-3 text-center">
-                <div class="text-2xl mb-1">🏭</div>
-                <div class="text-[10px] font-black uppercase mt-0.5">Завод</div>
-                <div class="text-[10px] text-blue-400 font-bold">$3k</div>
+            <div onclick="selectTool('commercial')" id="tool-commercial" class="card rounded-[3rem] p-6 min-w-[120px] text-center bg-white/5">
+                <span class="text-4xl block mb-2">🏙️</span>
+                <p class="text-[10px] font-black uppercase text-gray-400">Офисы</p>
+                <p class="text-[10px] text-blue-400 font-bold mt-1">$8k</p>
             </div>
-            <div class="w-px h-12 bg-white/10 my-auto mx-1"></div>
-            <div onclick="selectBuilding('demolish')" id="btn-demolish" class="building-card rounded-3xl px-6 py-3 text-center">
-                <div class="text-2xl mb-1">💣</div>
-                <div class="text-[10px] font-black uppercase text-red-500 mt-0.5">Снос</div>
+            <div onclick="selectTool('factory')" id="tool-factory" class="card rounded-[3rem] p-6 min-w-[120px] text-center bg-white/5">
+                <span class="text-4xl block mb-2">🏭</span>
+                <p class="text-[10px] font-black uppercase text-gray-400">Завод</p>
+                <p class="text-[10px] text-blue-400 font-bold mt-1">$20k</p>
+            </div>
+            <div onclick="selectTool('corp')" id="tool-corp" class="card rounded-[3rem] p-6 min-w-[120px] text-center bg-white/5">
+                <span class="text-4xl block mb-2">💎</span>
+                <p class="text-[10px] font-black uppercase text-gray-400">Небоскреб</p>
+                <p class="text-[10px] text-blue-400 font-bold mt-1">$60k</p>
+            </div>
+            <div onclick="selectTool('president')" id="tool-president" class="card rounded-[3rem] p-6 min-w-[120px] text-center border-yellow-500/30 bg-yellow-500/5">
+                <span class="text-4xl block mb-2">🏛️</span>
+                <p class="text-[10px] font-black uppercase text-yellow-500">Дворец</p>
+                <p class="text-[10px] text-yellow-500 font-bold mt-1">$200k</p>
+            </div>
+            <div class="w-px h-16 bg-white/10 mx-2"></div>
+            <div onclick="selectTool('demolish')" id="tool-demolish" class="card rounded-[3rem] p-6 min-w-[120px] text-center hover:bg-red-500/10">
+                <span class="text-4xl block mb-2">🧨</span>
+                <p class="text-[10px] font-black uppercase text-red-500">Снос</p>
             </div>
         </div>
     </div>
 </div>
 
 <script>
+// --- КОНФИГУРАЦИЯ ---
 const Game = {
-    money: 10000,
+    money: 1000000,
     income: 0,
-    population: 0,
-    selectedType: 'residence',
-    cellSize: 4, 
+    pop: 0,
+    tool: 'residence',
+    cellSize: 4,
+    gridSize: 40,
     buildings: [],
-    roads: new Map(),
+    activeZones: new Set(['0_0']),
+    enemyCityPos: new THREE.Vector3(550, 0, -550), // Отодвинули чуть дальше
+    planes: [],
+    projectiles: [],
     cars: [],
-    dayTime: 12, // 0 to 24
-    buildingData: {
-        residence: { cost: 500, baseIncome: -10, basePop: 50, color: 0xe2e8f0, roof: 0x991b1b },
-        commercial: { cost: 1500, baseIncome: 200, basePop: 0, color: 0x334155, accent: 0x3b82f6 },
-        industrial: { cost: 3000, baseIncome: 450, basePop: -20, color: 0x475569, chimney: 0x1e293b },
-        demolish: { cost: 0, income: 0, pop: 0 }
+    particles: [],
+    time: 0,
+    data: {
+        residence: { cost: 1500, income: 100, pop: 50, color: 0x94a3b8 },
+        commercial: { cost: 8000, income: 600, pop: 10, color: 0x3b82f6 },
+        factory: { cost: 20000, income: 1800, pop: 5, color: 0x475569 },
+        corp: { cost: 60000, income: 5000, pop: 200, color: 0x1e1b4b },
+        president: { cost: 200000, income: 3000, pop: 50, color: 0xffd700 }
     }
 };
 
-let scene, camera, renderer, controls, raycaster, mouse;
-let island, ghostBuilding, hoverMesh, sunLight, ambientLight;
-const objects = []; 
-let mousePosOnDown = { x: 0, y: 0 };
+let scene, camera, renderer, controls, raycaster, mouse, hoverPlate, runway;
+const clickables = [];
 
+// --- ИНИЦИАЛИЗАЦИЯ ---
 function init() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb);
+    scene.background = new THREE.Color(0x020617);
+    scene.fog = new THREE.FogExp2(0x020617, 0.0012); // Чуть менее плотный туман для видимости
+    
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 10000);
+    camera.position.set(300, 250, 300);
 
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(60, 60, 60);
-
-    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
@@ -146,377 +156,464 @@ function init() {
     mouse = new THREE.Vector2();
 
     setupLights();
-    createEnvironment();
-    createGridSystem();
+    createWorld();
     
-    window.addEventListener('resize', onWindowResize);
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerdown', (e) => { mousePosOnDown = { x: e.clientX, y: e.clientY }; });
-    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('pointermove', e => { 
+        mouse.x = (e.clientX/window.innerWidth)*2-1; 
+        mouse.y = -(e.clientY/window.innerHeight)*2+1; 
+    });
+    window.addEventListener('pointerdown', onPointerDown);
 
     animate();
-    setInterval(gameTick, 2000);
+    setInterval(tick, 1000);
+    setInterval(spawnTraffic, 2000);
 }
 
 function setupLights() {
-    ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambientLight);
-
-    sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    sunLight.position.set(50, 100, 50);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.set(2048, 2048);
-    sunLight.shadow.camera.left = -60;
-    sunLight.shadow.camera.right = 60;
-    sunLight.shadow.camera.top = 60;
-    sunLight.shadow.camera.bottom = -60;
-    scene.add(sunLight);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    sun.position.set(400, 600, 200);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(4096, 4096);
+    sun.shadow.camera.left = -600;
+    sun.shadow.camera.right = 600;
+    sun.shadow.camera.top = 600;
+    sun.shadow.camera.bottom = -600;
+    scene.add(sun);
 }
 
-function createEnvironment() {
-    const ocean = new THREE.Mesh(
-        new THREE.CircleGeometry(1000, 32),
-        new THREE.MeshStandardMaterial({ color: 0x0a1e3f, roughness: 0.1, metalness: 0.2 })
-    );
-    ocean.rotation.x = -Math.PI / 2;
-    ocean.position.y = -0.5;
-    scene.add(ocean);
+function createWorld() {
+    // Бесконечный океан
+    const seaGeo = new THREE.CircleGeometry(8000, 64);
+    const seaMat = new THREE.MeshStandardMaterial({ color: 0x075985, roughness: 0.1, metalness: 0.2 });
+    const sea = new THREE.Mesh(seaGeo, seaMat);
+    sea.rotation.x = -Math.PI/2;
+    sea.position.y = -1.5;
+    scene.add(sea);
 
-    const islandBase = new THREE.Mesh(
-        new THREE.CylinderGeometry(45, 50, 8, 32),
-        new THREE.MeshStandardMaterial({ color: 0x221a15 })
-    );
-    islandBase.position.y = -4;
-    scene.add(islandBase);
+    // Острова (сетка)
+    for(let x=-5; x<=5; x++) {
+        for(let z=-5; z<=5; z++) {
+            const isMain = x===0 && z===0;
+            const tile = new THREE.Mesh(
+                new THREE.BoxGeometry(Game.gridSize-2, 2.5, Game.gridSize-2),
+                new THREE.MeshStandardMaterial({ 
+                    color: isMain ? 0x166534 : 0x0f172a, 
+                    roughness: 0.8 
+                })
+            );
+            tile.position.set(x*Game.gridSize, -1.25, z*Game.gridSize);
+            tile.userData = { type: 'ground', id: `${x}_${z}`, x, z };
+            tile.receiveShadow = true;
+            scene.add(tile);
+            clickables.push(tile);
 
-    const grass = new THREE.Mesh(
-        new THREE.PlaneGeometry(80, 80),
-        new THREE.MeshStandardMaterial({ color: 0x2d4c1e, roughness: 1 })
-    );
-    grass.rotation.x = -Math.PI / 2;
-    grass.receiveShadow = true;
-    scene.add(grass);
-    objects.push(grass); 
-}
-
-function createGridSystem() {
-    const grid = new THREE.GridHelper(80, 80 / Game.cellSize, 0xffffff, 0x333333);
-    grid.material.opacity = 0.1;
-    grid.material.transparent = true;
-    grid.position.y = 0.01;
-    scene.add(grid);
-
-    hoverMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(Game.cellSize - 0.2, Game.cellSize - 0.2),
-        new THREE.MeshBasicMaterial({ color: 0x3b82f6, opacity: 0.3, transparent: true })
-    );
-    hoverMesh.rotation.x = -Math.PI / 2;
-    hoverMesh.position.y = 0.05;
-    scene.add(hoverMesh);
-
-    ghostBuilding = new THREE.Group();
-    scene.add(ghostBuilding);
-}
-
-// Модифицированная функция создания мешей зданий
-function createBuildingMesh(type, level = 1, isGhost = false) {
-    const group = new THREE.Group();
-    const config = Game.buildingData[type];
-    const opacity = isGhost ? 0.4 : 1.0;
-    
-    const mat = new THREE.MeshStandardMaterial({ color: config.color, transparent: isGhost, opacity: opacity });
-    const windowMat = new THREE.MeshBasicMaterial({ color: 0xffcc00, transparent: true, opacity: 0 });
-
-    const w = Game.cellSize * 0.65;
-    const h = (type === 'residence' ? 1.2 : (type === 'commercial' ? 3.0 : 2.0)) * (1 + (level-1)*0.4);
-
-    if (type === 'residence') {
-        // Уютный домик с крышей
-        const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), mat);
-        body.position.y = h/2;
-        group.add(body);
-
-        // Крыша
-        const roofGeom = new THREE.ConeGeometry(w * 0.8, h * 0.5, 4);
-        const roofMat = new THREE.MeshStandardMaterial({ color: config.roof, transparent: isGhost, opacity: opacity });
-        const roof = new THREE.Mesh(roofGeom, roofMat);
-        roof.position.y = h + (h * 0.2);
-        roof.rotation.y = Math.PI / 4;
-        group.add(roof);
-
-        // Пристройка (крыльцо/гараж)
-        const ann = new THREE.Mesh(new THREE.BoxGeometry(w * 0.4, h * 0.5, w * 0.4), mat);
-        ann.position.set(w * 0.4, h * 0.25, 0);
-        group.add(ann);
-    } 
-    else if (type === 'commercial') {
-        // Современный офис с деталями
-        const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), mat);
-        body.position.y = h/2;
-        group.add(body);
-
-        // Стеклянная вставка
-        const glassMat = new THREE.MeshStandardMaterial({ color: config.accent, metalness: 0.8, roughness: 0.1, transparent: true, opacity: isGhost ? 0.2 : 0.6 });
-        const glass = new THREE.Mesh(new THREE.BoxGeometry(w * 0.4, h, w + 0.02), glassMat);
-        glass.position.y = h/2;
-        group.add(glass);
-
-        // Парапет на крыше
-        const rim = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 0.2, w + 0.1), mat);
-        rim.position.y = h;
-        group.add(rim);
-    } 
-    else if (type === 'industrial') {
-        // Завод с трубами и секциями
-        const body1 = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.7, w), mat);
-        body1.position.y = (h * 0.7) / 2;
-        group.add(body1);
-
-        const body2 = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, h * 0.4, w * 0.6), mat);
-        body2.position.set(0, h * 0.9, 0);
-        group.add(body2);
-
-        // Труба
-        const chimney = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, h * 1.2), new THREE.MeshStandardMaterial({ color: config.chimney }));
-        chimney.position.set(-w * 0.3, h * 0.6, -w * 0.3);
-        group.add(chimney);
-
-        // Полоски на трубе (декор)
-        const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.2), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-        stripe.position.y = h * 1.1;
-        chimney.add(stripe);
-    }
-
-    // Окна
-    if (!isGhost) {
-        const windowCount = Math.floor(h * 3);
-        for(let i=0; i < windowCount; i++) {
-            const win = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.2), windowMat.clone());
-            win.userData.isWindow = true;
-            const side = i % 4;
-            const yPos = 0.4 + (Math.floor(i/4) * 0.6);
-            if(yPos > h - 0.3) continue;
-
-            const offset = w/2 + 0.02;
-            if(side === 0) win.position.set((Math.random()-0.5)*w*0.6, yPos, offset);
-            if(side === 1) { win.position.set((Math.random()-0.5)*w*0.6, yPos, -offset); win.rotation.y = Math.PI; }
-            if(side === 2) { win.position.set(offset, yPos, (Math.random()-0.5)*w*0.6); win.rotation.y = Math.PI/2; }
-            if(side === 3) { win.position.set(-offset, yPos, (Math.random()-0.5)*w*0.6); win.rotation.y = -Math.PI/2; }
-            group.add(win);
+            // Трава на обитаемых островах
+            if(isMain) createNature(tile.position);
         }
     }
 
-    group.traverse(c => { if(c.isMesh) { c.castShadow = true; c.receiveShadow = !isGhost; } });
+    hoverPlate = new THREE.Mesh(
+        new THREE.PlaneGeometry(Game.cellSize, Game.cellSize), 
+        new THREE.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.4 })
+    );
+    hoverPlate.rotation.x = -Math.PI/2;
+    hoverPlate.position.y = 0.1;
+    scene.add(hoverPlate);
+
+    // Вражеский мегаполис (УМЕНЬШЕННЫЙ)
+    const enemyBase = new THREE.Group();
+    for(let i=0; i<60; i++) {
+        // Уменьшили размеры: h (высота) 20-80 вместо 40-150, w (ширина) 8 вместо 18
+        const h = 20 + Math.random()*60;
+        const w = 6 + Math.random()*4;
+        const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshStandardMaterial({ color: 0x0f172a }));
+        b.position.set(Math.random()*150-75, h/2, Math.random()*150-75);
+        b.castShadow = true;
+        enemyBase.add(b);
+
+        // Добавили светящиеся точки (далекие окна)
+        if(Math.random() > 0.5) {
+            const dot = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshBasicMaterial({color: 0xfde047}));
+            dot.position.set(b.position.x + (Math.random()-0.5)*w, Math.random()*h, b.position.z + (Math.random()-0.5)*w);
+            enemyBase.add(dot);
+        }
+    }
+    enemyBase.position.copy(Game.enemyCityPos);
+    scene.add(enemyBase);
+}
+
+function createNature(pos) {
+    for(let i=0; i<30; i++) {
+        const grass = new THREE.Mesh(
+            new THREE.BoxGeometry(0.3, Math.random()*1.2, 0.3),
+            new THREE.MeshStandardMaterial({ color: 0x15803d })
+        );
+        grass.position.set(pos.x + Math.random()*36-18, 0.5, pos.z + Math.random()*36-18);
+        scene.add(grass);
+    }
+}
+
+// --- ВИЗУАЛ ЗДАНИЙ ---
+function createBuilding(type, level = 1) {
+    const group = new THREE.Group();
+    const data = Game.data[type];
+    const w = Game.cellSize * 0.85;
+    const mat = new THREE.MeshStandardMaterial({ color: data.color, roughness: 0.5 });
+    const windowMat = new THREE.MeshStandardMaterial({ color: 0xfde047, emissive: 0xfde047, emissiveIntensity: 0.5 });
+
+    let h = 4;
+    switch(type) {
+        case 'residence':
+            h = 3 + level * 2.5;
+            const b1 = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), mat);
+            b1.position.y = h/2;
+            group.add(b1);
+            addWindows(group, w, h, w);
+            const r1 = new THREE.Mesh(new THREE.BoxGeometry(w*1.1, 0.5, w*1.1), new THREE.MeshStandardMaterial({color: 0x334155}));
+            r1.position.y = h;
+            group.add(r1);
+            for(let i=0; i<level; i++) {
+                const tree = createTree();
+                tree.position.set(Math.random()*2-1, 0, Math.random()*2-1);
+                group.add(tree);
+            }
+            break;
+
+        case 'commercial':
+            h = 8 + level * 4;
+            const b2 = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), mat);
+            b2.position.y = h/2;
+            group.add(b2);
+            const neon = new THREE.Mesh(new THREE.BoxGeometry(w*1.02, h*0.8, w*0.3), new THREE.MeshStandardMaterial({color: 0x3b82f6, emissive: 0x3b82f6, emissiveIntensity: 0.8}));
+            neon.position.y = h/2;
+            group.add(neon);
+            addWindows(group, w, h, w, 0.1);
+            break;
+
+        case 'factory':
+            h = 6;
+            const b3 = new THREE.Mesh(new THREE.BoxGeometry(w*1.4, h, w*1.1), mat);
+            b3.position.y = h/2;
+            group.add(b3);
+            for(let i=0; i<3; i++) {
+                const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 6), new THREE.MeshStandardMaterial({color: 0x1e293b}));
+                tube.position.set(i*1.2-1.2, h+2.5, 0);
+                group.add(tube);
+            }
+            break;
+
+        case 'corp':
+            h = 20 + level * 10;
+            const b4 = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), mat);
+            b4.position.y = h/2;
+            group.add(b4);
+            for(let i=1; i<=3; i++) {
+                const section = new THREE.Mesh(new THREE.BoxGeometry(w*1.1, 1, w*1.1), windowMat);
+                section.position.y = (h/4) * i;
+                group.add(section);
+            }
+            const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.1, 8), new THREE.MeshStandardMaterial({color: 0x000000}));
+            ant.position.y = h + 4;
+            group.add(ant);
+            const light = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshBasicMaterial({color: 0xef4444}));
+            light.position.y = h + 8;
+            group.add(light);
+            break;
+
+        case 'president':
+            h = 12;
+            const b5 = new THREE.Mesh(new THREE.BoxGeometry(w*2, h, w*2), mat);
+            b5.position.y = h/2;
+            group.add(b5);
+            const d = new THREE.Mesh(new THREE.SphereGeometry(w*1.2, 24, 24, 0, Math.PI*2, 0, Math.PI/2), new THREE.MeshStandardMaterial({color: 0xfacc15, metalness: 0.9, roughness: 0.1}));
+            d.position.y = h;
+            group.add(d);
+            for(let i=0; i<8; i++) {
+                const col = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, h), new THREE.MeshStandardMaterial({color: 0xffffff}));
+                const angle = (i/8)*Math.PI*2;
+                col.position.set(Math.cos(angle)*w, h/2, Math.sin(angle)*w);
+                group.add(col);
+            }
+            break;
+    }
+    
+    group.traverse(o => { if(o.isMesh) { o.castShadow = true; o.receiveShadow = true; }});
     return group;
 }
 
-function updateRoads() {
-    Game.roads.forEach(r => scene.remove(r.mesh));
-    Game.roads.clear();
-    const roadMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
-
-    Game.buildings.forEach((b1, i) => {
-        Game.buildings.forEach((b2, j) => {
-            if (i >= j) return;
-            const dx = Math.abs(b1.gx - b2.gx);
-            const dz = Math.abs(b1.gz - b2.gz);
-
-            if ((dx === 1 && dz === 0) || (dx === 0 && dz === 1)) {
-                const rx = (b1.posX + b2.posX) / 2;
-                const rz = (b1.posZ + b2.posZ) / 2;
-                const key = `${rx.toFixed(1)}_${rz.toFixed(1)}`;
-                
-                if (!Game.roads.has(key)) {
-                    const isX = dx === 1;
-                    const road = new THREE.Mesh(
-                        new THREE.PlaneGeometry(isX ? Game.cellSize : 1.8, isX ? 1.8 : Game.cellSize), 
-                        roadMat
-                    );
-                    road.rotation.x = -Math.PI / 2;
-                    road.position.set(rx, 0.02, rz);
-                    scene.add(road);
-                    Game.roads.set(key, { mesh: road, x: rx, z: rz, isX: isX });
-                }
-            }
-        });
-    });
-}
-
-function spawnCar() {
-    if (Game.roads.size === 0) return;
-    const roadArray = Array.from(Game.roads.values());
-    const r = roadArray[Math.floor(Math.random() * roadArray.length)];
-    
-    const carGroup = new THREE.Group();
-    const carBody = new THREE.Mesh(
-        new THREE.BoxGeometry(0.7, 0.3, 0.35),
-        new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(Math.random(), 0.8, 0.5) })
-    );
-    carGroup.add(carBody);
-    
-    const headLight = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.25), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
-    headLight.position.set(0.35, 0, 0);
-    headLight.userData.isCarLight = true;
-    carGroup.add(headLight);
-
-    carGroup.position.set(r.x, 0.2, r.z);
-    if (!r.isX) carGroup.rotation.y = Math.PI / 2;
-    
-    scene.add(carGroup);
-    Game.cars.push({ mesh: carGroup, road: r, dir: Math.random() > 0.5 ? 1 : -1 });
-}
-
-function onPointerMove(event) {
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(objects);
-    if (intersects.length > 0) {
-        const p = intersects[0].point;
-        const gx = Math.round(p.x / Game.cellSize);
-        const gz = Math.round(p.z / Game.cellSize);
-        hoverMesh.position.set(gx * Game.cellSize, 0.05, gz * Game.cellSize);
-        ghostBuilding.position.set(gx * Game.cellSize, 0, gz * Game.cellSize);
-        hoverMesh.visible = true;
-        ghostBuilding.visible = (Game.selectedType !== 'demolish');
-    }
-}
-
-function onPointerUp(event) {
-    const dist = Math.hypot(event.clientX - mousePosOnDown.x, event.clientY - mousePosOnDown.y);
-    if (dist > 8) return; 
-
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(objects);
-    if (intersects.length > 0) {
-        const p = intersects[0].point;
-        const gx = Math.round(p.x / Game.cellSize);
-        const gz = Math.round(p.z / Game.cellSize);
-        const gridId = `${gx}_${gz}`;
-        const existing = Game.buildings.find(b => b.id === gridId);
-
-        if (Game.selectedType === 'demolish') {
-            if (existing) removeBuilding(gridId);
-        } else {
-            if (existing) upgradeBuilding(existing);
-            else placeBuilding(gx, gz, gridId);
+function addWindows(group, w, h, d, chance = 0.2) {
+    const winMat = new THREE.MeshStandardMaterial({ color: 0xfde047, emissive: 0xfde047, emissiveIntensity: 1 });
+    for(let y=1; y<h; y+=1.5) {
+        if(Math.random() > chance) {
+            const win = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.6), winMat);
+            win.position.set(w/2 + 0.01, y, (Math.random()-0.5)*w*0.7);
+            win.rotation.y = Math.PI/2;
+            group.add(win);
         }
     }
 }
 
-function placeBuilding(gx, gz, id) {
-    const config = Game.buildingData[Game.selectedType];
-    if (Game.money < config.cost) return;
-    Game.money -= config.cost;
-    const px = gx * Game.cellSize;
-    const pz = gz * Game.cellSize;
-    const mesh = createBuildingMesh(Game.selectedType, 1);
-    mesh.position.set(px, 0, pz);
+function createTree() {
+    const t = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 1.5), new THREE.MeshStandardMaterial({color: 0x451a03}));
+    const leaves = new THREE.Mesh(new THREE.SphereGeometry(0.8, 8, 8), new THREE.MeshStandardMaterial({color: 0x15803d}));
+    leaves.position.y = 1.2;
+    t.add(trunk, leaves);
+    return t;
+}
+
+// --- АЭРОПОРТ ---
+function createRunway(pos) {
+    if(runway) return;
+    const group = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.BoxGeometry(100, 0.2, 20), new THREE.MeshStandardMaterial({color: 0x1e293b}));
+    group.add(base);
+    for(let i=0; i<10; i++) {
+        const stripe = new THREE.Mesh(new THREE.PlaneGeometry(4, 1), new THREE.MeshBasicMaterial({color: 0xffffff}));
+        stripe.rotation.x = -Math.PI/2;
+        stripe.position.set(i*10-45, 0.11, 0);
+        group.add(stripe);
+    }
+    for(let i=0; i<10; i++) {
+        const l1 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshBasicMaterial({color: 0x22c55e}));
+        l1.position.set(i*10-45, 0.5, 9);
+        const l2 = l1.clone();
+        l2.position.z = -9;
+        group.add(l1, l2);
+    }
+    group.position.set(pos.x, 0.1, pos.z + 50);
+    scene.add(group);
+    runway = group;
+}
+
+// --- СИСТЕМЫ ---
+function spawnTraffic() {
+    if(Game.buildings.length < 2) return;
+    const b1 = Game.buildings[Math.floor(Math.random()*Game.buildings.length)];
+    const b2 = Game.buildings[Math.floor(Math.random()*Game.buildings.length)];
+    if(b1 === b2) return;
+    const car = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 1.4), new THREE.MeshStandardMaterial({color: Math.random()*0xffffff}));
+    car.position.set(b1.gx*Game.cellSize, 0.4, b1.gz*Game.cellSize);
+    scene.add(car);
+    Game.cars.push({ mesh: car, start: car.position.clone(), end: new THREE.Vector3(b2.gx*Game.cellSize, 0.4, b2.gz*Game.cellSize), t: 0 });
+}
+
+function spawnExplosion(pos, color) {
+    for(let i=0; i<20; i++) {
+        const p = new THREE.Mesh(new THREE.SphereGeometry(0.6), new THREE.MeshBasicMaterial({color, transparent: true, opacity: 0.9}));
+        p.position.copy(pos);
+        const v = new THREE.Vector3((Math.random()-0.5)*2, Math.random()*2, (Math.random()-0.5)*2);
+        scene.add(p);
+        Game.particles.push({ mesh: p, vel: v, life: 1.0 });
+    }
+}
+
+// --- ИГРОВАЯ ЛОГИКА ---
+function onPointerDown(e) {
+    if (e.target.closest('#ui-layer') && e.target !== document.getElementById('ui-layer')) return;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects([...clickables, ...Game.planes.map(p => p.mesh)], true);
+    
+    if (hits.length > 0) {
+        const hit = hits[0];
+        const targetPlane = Game.planes.find(p => p.mesh === hit.object || p.mesh.children.includes(hit.object) || hit.object.parent === p.mesh);
+        if(targetPlane && targetPlane.owner === 'enemy') {
+            destroyPlane(targetPlane);
+            return;
+        }
+
+        const data = hit.object.userData;
+        if (data.type === 'ground') {
+            const gx = Math.round(hit.point.x / Game.cellSize);
+            const gz = Math.round(hit.point.z / Game.cellSize);
+            handleBuild(gx, gz, `${gx}_${gz}`, data);
+        }
+    }
+}
+
+function handleBuild(gx, gz, id, tile) {
+    const existing = Game.buildings.find(b => b.id === id);
+    if (Game.tool === 'demolish') {
+        if(existing) {
+            spawnExplosion(existing.mesh.position, 0x444444);
+            scene.remove(existing.mesh);
+            Game.buildings = Game.buildings.filter(x => x !== existing);
+            if(existing.type === 'president') {
+                document.getElementById('war-panel').classList.add('hidden');
+                if(runway) { scene.remove(runway); runway = null; }
+            }
+            updateStats();
+        }
+        return;
+    }
+
+    if (!Game.activeZones.has(tile.id)) {
+        if(Game.money >= 50000) {
+            Game.money -= 50000;
+            Game.activeZones.add(tile.id);
+            clickables.find(c => c.userData.id === tile.id).material.color.setHex(0x166534);
+            updateStats();
+        }
+        return;
+    }
+
+    if (existing) {
+        if(existing.level < 3 && existing.type !== 'president') {
+            const cost = Game.data[existing.type].cost * (existing.level + 1);
+            if(Game.money >= cost) {
+                Game.money -= cost;
+                existing.level++;
+                const pos = existing.mesh.position.clone();
+                scene.remove(existing.mesh);
+                existing.mesh = createBuilding(existing.type, existing.level);
+                existing.mesh.position.copy(pos);
+                scene.add(existing.mesh);
+                updateStats();
+            }
+        }
+    } else {
+        const conf = Game.data[Game.tool];
+        if(Game.tool === 'president' && Game.buildings.some(b => b.type === 'president')) return;
+        if(Game.money >= conf.cost) {
+            Game.money -= conf.cost;
+            const mesh = createBuilding(Game.tool);
+            mesh.position.set(gx*Game.cellSize, 0, gz*Game.cellSize);
+            scene.add(mesh);
+            Game.buildings.push({ id, gx, gz, type: Game.tool, level: 1, mesh });
+            if(Game.tool === 'president') {
+                document.getElementById('war-panel').classList.remove('hidden');
+                document.getElementById('stat-status').innerText = '⚔️ ТРЕВОГА';
+                document.getElementById('stat-status').parentElement.style.borderColor = '#ef4444';
+                createRunway(mesh.position);
+            }
+            updateStats();
+        }
+    }
+}
+
+// --- ВОЙНА ---
+function spawnSquadron() {
+    if(Game.money < 30000) return;
+    Game.money -= 30000;
+    for(let i=0; i<3; i++) {
+        setTimeout(() => {
+            const m = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.5, 4), new THREE.MeshStandardMaterial({color: 0x3b82f6, metalness: 0.8}));
+            const wings = new THREE.Mesh(new THREE.BoxGeometry(5, 0.1, 1.5), new THREE.MeshStandardMaterial({color: 0x3b82f6}));
+            m.add(body, wings);
+            scene.add(m);
+            Game.planes.push({ mesh: m, owner: 'player', angle: Math.random()*6, radius: 120, height: 80, speed: 0.02, target: Game.enemyCityPos, timer: 0 });
+        }, i*600);
+    }
+}
+
+function launchMissile() {
+    if(Game.money < 15000) return;
+    Game.money -= 15000;
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 4), new THREE.MeshStandardMaterial({color: 0xffaa00, emissive: 0xffaa00}));
     scene.add(mesh);
-    Game.buildings.push({ id, gx, gz, posX: px, posZ: pz, type: Game.selectedType, mesh, level: 1 });
-    updateRoads();
+    Game.projectiles.push({ mesh, start: new THREE.Vector3(0,0,0), end: Game.enemyCityPos.clone(), t: 0, speed: 0.007, heavy: true });
+}
+
+function destroyPlane(p) {
+    spawnExplosion(p.mesh.position, 0xff5500);
+    scene.remove(p.mesh);
+    Game.planes = Game.planes.filter(x => x !== p);
+    Game.money += 20000;
     updateStats();
 }
 
-function upgradeBuilding(b) {
-    const cost = Math.floor(Game.buildingData[b.type].cost * b.level);
-    if (Game.money < cost || b.level >= 5) return;
-    Game.money -= cost;
-    b.level++;
-    scene.remove(b.mesh);
-    b.mesh = createBuildingMesh(b.type, b.level);
-    b.mesh.position.set(b.posX, 0, b.posZ);
-    scene.add(b.mesh);
-    updateStats();
-}
-
-function removeBuilding(id) {
-    const idx = Game.buildings.findIndex(b => b.id === id);
-    if(idx === -1) return;
-    scene.remove(Game.buildings[idx].mesh);
-    Game.buildings.splice(idx, 1);
-    updateRoads();
-    updateStats();
-}
-
-function selectBuilding(type) {
-    Game.selectedType = type;
-    document.querySelectorAll('.building-card').forEach(el => el.classList.remove('active'));
-    document.getElementById(`btn-${type}`).classList.add('active');
-    while(ghostBuilding.children.length > 0) ghostBuilding.remove(ghostBuilding.children[0]);
-    if (type !== 'demolish') ghostBuilding.add(createBuildingMesh(type, 1, true));
-}
-
-function updateStats() {
-    let income = 0; let pop = 0;
-    Game.buildings.forEach(b => { 
-        income += Game.buildingData[b.type].baseIncome * b.level; 
-        pop += Game.buildingData[b.type].basePop * b.level; 
-    });
-    Game.income = income;
-    Game.population = Math.max(0, pop);
-    document.getElementById('stat-money').innerText = `$${Math.floor(Game.money).toLocaleString()}`;
-    document.getElementById('stat-income').innerText = (income >= 0 ? '+' : '') + `$${income}`;
-    document.getElementById('stat-pop').innerText = pop.toLocaleString();
-}
-
-function gameTick() {
-    Game.money += Game.income / 5;
-    updateStats();
-}
-
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
+// --- ЦИКЛ ---
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
-    
-    // Система времени
-    Game.dayTime = (Game.dayTime + 0.005) % 24;
-    const isNight = Game.dayTime < 6 || Game.dayTime > 18;
-    const timeText = (isNight ? "Ночь " : "День ") + Math.floor(Game.dayTime).toString().padStart(2, '0') + ":00";
-    document.getElementById('time-display').innerText = timeText;
+    Game.time += 0.01;
 
-    // Освещение и небо
-    const sunAngle = (Game.dayTime / 24) * Math.PI * 2 - Math.PI/2;
-    sunLight.position.set(Math.cos(sunAngle) * 100, Math.sin(sunAngle) * 100, 50);
-    const sunIntensity = Math.max(0, Math.sin(sunAngle));
-    sunLight.intensity = sunIntensity * 1.2;
-    ambientLight.intensity = 0.2 + sunIntensity * 0.4;
-    
-    const skyColor = new THREE.Color().setHSL(0.55, 0.4, 0.05 + sunIntensity * 0.55);
-    scene.background = skyColor;
+    for(let i=Game.cars.length-1; i>=0; i--) {
+        const c = Game.cars[i]; c.t += 0.008;
+        c.mesh.position.lerpVectors(c.start, c.end, c.t);
+        c.mesh.lookAt(c.end);
+        if(c.t >= 1) { scene.remove(c.mesh); Game.cars.splice(i, 1); }
+    }
 
-    // Свет в окнах и фары
-    const winOpacity = isNight ? 1.0 : 0;
-    scene.traverse(obj => {
-        if(obj.userData.isWindow) obj.material.opacity = winOpacity;
-        if(obj.userData.isCarLight) obj.material.opacity = isNight ? 1 : 0;
-    });
-
-    // Движение машин
-    if (Game.roads.size > 0 && Game.cars.length < Game.roads.size * 1.5) spawnCar();
-
-    Game.cars.forEach((car, idx) => {
-        const speed = 0.07;
-        if (car.road.isX) {
-            car.mesh.position.x += speed * car.dir;
-            if (Math.abs(car.mesh.position.x - car.road.x) > Game.cellSize/2 - 0.4) car.dir *= -1;
-        } else {
-            car.mesh.position.z += speed * car.dir;
-            if (Math.abs(car.mesh.position.z - car.road.z) > Game.cellSize/2 - 0.4) car.dir *= -1;
+    Game.planes.forEach(p => {
+        p.angle += p.speed;
+        const tx = p.target.x + Math.cos(p.angle)*p.radius;
+        const tz = p.target.z + Math.sin(p.angle)*p.radius;
+        p.mesh.position.lerp(new THREE.Vector3(tx, p.height, tz), 0.05);
+        p.mesh.lookAt(new THREE.Vector3(p.target.x + Math.cos(p.angle+0.1)*p.radius, p.height, p.target.z + Math.sin(p.angle+0.1)*p.radius));
+        p.timer++;
+        if(p.timer > 100) {
+            const start = p.mesh.position.clone();
+            const end = p.target.clone().add(new THREE.Vector3((Math.random()-0.5)*100, 0, (Math.random()-0.5)*100));
+            const shot = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshBasicMaterial({color: 0x3b82f6}));
+            scene.add(shot);
+            Game.projectiles.push({ mesh: shot, start, end, t: 0, speed: 0.04, heavy: false });
+            p.timer = 0;
         }
     });
+
+    for(let i=Game.projectiles.length-1; i>=0; i--) {
+        const pr = Game.projectiles[i]; pr.t += pr.speed;
+        const pos = new THREE.Vector3().lerpVectors(pr.start, pr.end, pr.t);
+        pos.y += Math.sin(pr.t * Math.PI) * (pr.heavy ? 150 : 30);
+        pr.mesh.position.copy(pos);
+        pr.mesh.lookAt(pr.end);
+        if(pr.t >= 1) { spawnExplosion(pr.end, 0xff7700); scene.remove(pr.mesh); Game.projectiles.splice(i, 1); }
+    }
+
+    for(let i=Game.particles.length-1; i>=0; i--) {
+        const p = Game.particles[i];
+        p.mesh.position.add(p.vel);
+        p.life -= 0.015;
+        p.mesh.scale.setScalar(p.life);
+        if(p.life <= 0) { scene.remove(p.mesh); Game.particles.splice(i,1); }
+    }
+
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(clickables);
+    if(hits.length > 0) {
+        const hit = hits[0];
+        hoverPlate.position.set(Math.round(hit.point.x/4)*4, 0.2, Math.round(hit.point.z/4)*4);
+    }
 
     renderer.render(scene, camera);
 }
 
-init();
-selectBuilding('residence');
+function selectTool(t) {
+    Game.tool = t;
+    document.querySelectorAll('.card').forEach(c => c.classList.remove('active'));
+    document.getElementById('tool-'+t).classList.add('active');
+}
+
+function updateStats() {
+    document.getElementById('stat-money').innerText = `$${Math.floor(Game.money).toLocaleString()}`;
+    document.getElementById('stat-income').innerText = `+$${Math.floor(Game.income).toLocaleString()}`;
+    document.getElementById('stat-pop').innerText = Math.floor(Game.pop).toLocaleString();
+}
+
+function tick() {
+    let inc = 0;
+    let p = 0;
+    Game.buildings.forEach(b => {
+        inc += Game.data[b.type].income * b.level;
+        p += Game.data[b.type].pop * b.level;
+    });
+    Game.income = inc;
+    Game.pop = p;
+    Game.money += inc / 10;
+    updateStats();
+}
+
+function onResize() {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+window.onload = init;
 </script>
 </body>
 </html>
